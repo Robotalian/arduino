@@ -1,0 +1,74 @@
+#include <SoftwareSerial.h>
+
+#define TRIG 8
+#define ECHO 9
+#define IN1 4
+#define IN2 5
+
+SoftwareSerial esp(2, 3); // RX, TX
+bool autoMode = false;
+
+void setup() {
+  Serial.begin(9600);
+  esp.begin(9600);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  stopMotor();
+
+  delay(2000);
+  // Configurar ESP8266 como punto de acceso + servidor
+  esp.println("AT+CWMODE=2");
+  delay(1000);
+  esp.println("AT+CIPMUX=1");
+  delay(1000);
+  esp.println("AT+CIPSERVER=1,80");
+  delay(2000);
+}
+
+void loop() {
+  if (esp.available()) {
+    String cmd = esp.readStringUntil('\n');
+    cmd.trim();
+    if (cmd == "R") motorDerecha();
+    else if (cmd == "L") motorIzquierda();
+    else if (cmd == "S") stopMotor();
+    else if (cmd == "A") autoMode = true;
+    else if (cmd == "M") { autoMode = false; stopMotor(); }
+  }
+
+  if (autoMode) {
+    long dist = medirDistancia();
+    esp.println(dist);
+    if (dist >= 100 && dist <= 200) motorDerecha();
+    else if (dist > 200 && dist <= 300) motorIzquierda();
+    else stopMotor();
+    delay(500);
+  }
+}
+
+long medirDistancia() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  long duration = pulseIn(ECHO, HIGH);
+  return duration * 0.034 / 2;
+}
+
+void motorDerecha() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+}
+
+void motorIzquierda() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+}
+
+void stopMotor() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+}
