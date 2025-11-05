@@ -1,0 +1,232 @@
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>#include <BLE2902.h>
+
+// --- Asignación de Pines para ESP32 ---
+// Sensor Ultrasónico HC-SR04
+const int pinTrig = 23;          // Pin de disparo (Trigger)
+const int pinEcho = 22;          // Pin de eco (Echo)
+
+// Controlador de Motor L298N o similar
+const int pinMotor1 = 19;        // Pin de dirección 1 del motor
+const int pinMotor2 = 18;        // Pin de dirección 2 del motor
+const int pinMotorPWM = 5;       // Pin PWM para control de velocidad
+
+// --- Configuración PWM (LEDC) para ESP32 ---
+const int canalPWM = 0;          // Canal LEDC (0-15)
+const int frecuenciaPWM = 5000;  // Frecuencia en Hz
+const int resolucionPWM = 8;     // Resolución en bits (8 bits = 0-255)
+
+// --- UUIDs del servicio y características BLE (deben coincidir con la App) ---
+#define SERVICE_UUID           "19B10000-E8F2-537E-4F6C-D104768A1214"
+#define COMANDO_CHAR_UUID      "19B10001-E8F2-537E-4F6C-D104768A1214"
+#define SENSOR_CHAR_UUID       "19B10002-E8F2-537E-4F6C-D104768A1214"
+
+// Punteros a las características BLE
+BLECharacteristic* pComandoCharacteristic = NULL;
+BLECharacteristic* pSensorCharacteristic = NULL;
+
+// Variables de estado
+bool dispositivoConectado = false;
+bool modoAutomatico = false;
+long duracionPulso;
+int centimetros = 0;
+String estadoMotor = "DETENIDO";
+
+// Temporizadores (para evitar usar delay())
+unsigned long ultimoEnvio = 0;
+unsigned long ultimaLecturaSensor = 0;
+unsigned long ultimoControlAuto = 0;
+
+
+// --- Declaración de funciones ---
+void medircm();
+void controlarMotorAutomatico(int distancia);
+void girarDerecha();
+void girarIzquierda();
+void detenerMotor();
+void enviarEstadoBLE();
+String obtenerEstadoMotor();
+
+
+// --- Callbacks del Servidor BLE ---
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      dispositivoConectado = true;
+      Serial.println("Dispositivo conectado");
+    }
+
+    void onDisconnect(BLEServer* pServer) {
+      dispositivoConectado = false;
+      detenerMotor();
+      modoAutomatico = false;
+      Serial.println("Dispositivo desconectado. Reiniciando anuncio.");
+      pServer->getAdvertising()->start(); // Reiniciar el anuncio para permitir nuevas conexiones
+    }
+};
+
+// --- Callbacks para la característica de Comando ---
+class MyCommandCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+
+      if (value.length() > 0) {
+        String comando = String(value.c_str());
+        comando.trim();
+        Serial.print("Comando recibido: ");
+        Serial.println(comando);
+        
+        if (comando == "DERECHA" && !modoAutomatico) {
+          girarDerecha();
+        } else if (comando == "IZQUIERDA" && !modoAutomatico) {
+          girarIzquierda();
+        } else if (comando == "DETENER") {
+          detenerMotor();
+        } else if (comando == "MODO_AUTO") {
+          modoAutomatico = true;
+          detenerMotor();
+        } else if (comando == "MODO_MANUAL") {
+          modoAutomatico = false;
+          detenerMotor();
+        }
+        
+        // Enviar estado actualizado inmediatamente después de un comando
+        enviarEstadoBLE();
+      }
+    }
+};
+
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("==================================");
+  Serial.println("INICIANDO SISTEMA MOTOR BLE (ESP32)");
+  Serial.println("==================================");
+
+  // Configurar pines de E/S
+  pinMode(pinTrig, OUTPUT);
+  pinMode(pinEcho, INPUT);
+  pinMode(pinMotor1, OUTPUT);
+  pinMode(pinMotor2, OUTPUT);
+  
+  // Configurar el PWM con LEDC
+  ledcSetup(canalPWM, frecuenciaPWM, resolucionPWM);
+  ledcAttachPin(pinMotorPWM, canalPWM);
+
+  detenerMotor();
+
+  // --- Configuración del Servidor BLE ---
+  BLEDevice::init("ARDUINO"); // Nombre que verá la app
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  // Característica para recibir comandos
+  pComandoCharacteristic = pService->createCharacteristic(
+                             COMANDO_CHAR_UUID,
+                             BLECharacteristic::PROPERTY_WRITE
+                           );
+  pComandoCharacteristic->setCallbacks(new MyCommandCallbacks());
+
+  // Característica para enviar datos del sensor
+  pSensorCharacteristic = pService->createCharacteristic(
+                            SENSOR_CHAR_UUID,
+                            BLECharacteristic::PROPERTY_READ |
+                            BLECharacteristic::PROPERTY_NOTIFY
+                          );
+  // El descriptor 2902 es crucial para que las notificaciones funcionen en la app
+  pSensorCharacteristic->addDescriptor(new BLE2902());
+
+  // Iniciar el servicio y el anuncio (advertising)
+  pService->start();
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->start();
+
+  Serial.println("Esperando conexión BLE...");
+}
+
+void loop() {
+  unsigned long tiempoActual = millis();
+
+  // Si hay un dispositivo conectado, ejecutar la lógica principal
+  if (dispositivoConectado) {
+    // 1. Leer sensor cada 200ms
+    if (tiempoActual - ultimaLecturaSensor >= 200) {
+      medircm();
+      ultimaLecturaSensor = tiempoActual;
+    }
+
+    // 2. Ejecutar control automático si está activado
+    if (modoAutomatico && (tiempoActual - ultimoControlAuto >= 300)) {
+      controlarMotorAutomatico(centimetros);
+      ultimoControlAuto = tiempoActual;
+    }
+
+    // 3. Enviar estado actualizado a la app cada 500ms
+    if (tiempoActual - ultimoEnvio >= 500) {
+      enviarEstadoBLE();
+      ultimoEnvio = tiempoActual;
+    }
+  }
+  
+  // Un pequeño retardo para no saturar el bucle principal
+  delay(20);
+}
+
+
+// --- Implementación de Funciones ---
+
+void medircm() {
+  digitalWrite(pinTrig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(pinTrig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(pinTrig, LOW);
+  
+  duracionPulso = pulseIn(pinEcho, HIGH, 30000); // Timeout de 30ms
+  centimetros = (duracionPulso > 0) ? duracionPulso / 58.2 : 0;
+}
+
+void controlarMotorAutomatico(int distancia) {
+  if (distancia > 0 && distancia < 15) { // Si hay un obstáculo muy cerca
+    girarDerecha(); // Gira para esquivarlo
+  } else {
+    // Si no hay obstáculo, puedes hacer que avance o se detenga.
+    // Aquí lo detendremos por simplicidad.
+    detenerMotor(); 
+  }
+}
+
+void girarDerecha() { 
+  digitalWrite(pinMotor1, HIGH); 
+  digitalWrite(pinMotor2, LOW); 
+  ledcWrite(canalPWM, 255); // Máxima velocidad
+  estadoMotor = "DERECHA";
+}
+
+void girarIzquierda() { 
+  digitalWrite(pinMotor1, LOW); 
+  digitalWrite(pinMotor2, HIGH); 
+  ledcWrite(canalPWM, 255); // Máxima velocidad
+  estadoMotor = "IZQUIERDA";
+}
+
+void detenerMotor() { 
+  digitalWrite(pinMotor1, LOW); 
+  digitalWrite(pinMotor2, LOW); 
+  ledcWrite(canalPWM, 0); // Velocidad cero
+  estadoMotor = "DETENIDO";
+}
+
+void enviarEstadoBLE() {
+  String estado = "DISTANCIA:" + String(centimetros) + 
+                  ",MODO:" + (modoAutomatico ? "AUTO" : "MANUAL") +
+                  ",MOTOR:" + estadoMotor;
+                  
+  pSensorCharacteristic->setValue(estado.c_str());
+  pSensorCharacteristic->notify(); // Enviar notificación a la app
+  Serial.print("Enviando estado: ");
+  Serial.println(estado);
+}
