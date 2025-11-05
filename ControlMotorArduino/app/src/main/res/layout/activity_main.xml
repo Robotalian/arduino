@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#0D47A1">
+
+    <!-- Escudo del Barcelona (usaremos uno temporal) -->
+    <ImageView
+        android:id="@+id/ivEscudo"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="20dp"
+        android:background="#FFFFFF"
+        android:contentDescription="Escudo Barcelona" />
+
+    <!-- Display de distancia -->
+    <TextView
+        android:id="@+id/tvDistance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#7D004C99"
+        android:gravity="center"
+        android:layout_marginBottom="30dp"
+        android:padding="16dp"
+        android:text="Distancia: -- cm"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp" />
+
+    <!-- Controles manuales del motor -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:gravity="center"
+        android:text="CONTROL MANUAL"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnLeft"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_margin="5dp"
+            android:layout_weight="1"
+            android:background="#FF9800"
+            android:text="IZQUIERDA"
+            android:textAllCaps="false"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_margin="5dp"
+            android:layout_weight="1"
+            android:background="#F44336"
+            android:text="DETENER"
+            android:textAllCaps="false"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btnRight"
+            android:layout_width="0dp"
+            android:layout_height="80dp"
+            android:layout_margin="5dp"
+            android:layout_weight="1"
+            android:background="#4CAF50"
+            android:text="DERECHA"
+            android:textAllCaps="false"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+    <!-- Control automático por sensor -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:gravity="center"
+        android:text="CONTROL AUTOMÁTICO"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/btnSensorControl"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_marginBottom="10dp"
+        android:background="#2196F3"
+        android:text="ACTIVAR CONTROL POR SENSOR"
+        android:textAllCaps="false"
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/btnManualControl"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_marginBottom="30dp"
+        android:background="#9C27B0"
+        android:text="VOLVER A CONTROL MANUAL"
+        android:textAllCaps="false"
+        android:textSize="16sp" />
+
+    <!-- Estado de conexión -->
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#7D000000"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="Desconectado"
+        android:textColor="#FFCC00"
+        android:textSize="16sp" />
+
+</LinearLayout>

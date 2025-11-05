@@ -1,0 +1,134 @@
+// Arduino código para control de motor y sensor ultrasónico
+#include <SoftwareSerial.h>
+
+// Pines para el sensor ultrasónico
+const int trigPin = 9;
+const int echoPin = 10;
+
+// Pines para control del motor (L298N)
+const int motorIN1 = 3;
+const int motorIN2 = 4;
+const int motorENA = 5;
+
+// Bluetooth
+SoftwareSerial bluetooth(6, 7); // RX, TX
+
+// Variables
+long duration;
+int distance;
+bool sensorControl = false; // false = control manual, true = control por sensor
+
+void setup() {
+  // Configurar pines del sensor
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  
+  // Configurar pines del motor
+  pinMode(motorIN1, OUTPUT);
+  pinMode(motorIN2, OUTPUT);
+  pinMode(motorENA, OUTPUT);
+  
+  // Inicializar Bluetooth
+  bluetooth.begin(9600);
+  Serial.begin(9600);
+  
+  // Detener motor inicialmente
+  stopMotor();
+  
+  Serial.println("Sistema iniciado - Listo para Bluetooth");
+}
+
+void loop() {
+  // Leer sensor ultrasónico
+  distance = readUltrasonic();
+  
+  // Procesar comandos Bluetooth
+  if (bluetooth.available()) {
+    char command = bluetooth.read();
+    processCommand(command);
+  }
+  
+  // Control automático por sensor si está activado
+  if (sensorControl) {
+    controlMotorBySensor();
+  }
+  
+  // Enviar distancia por Bluetooth cada 500ms
+  static unsigned long lastSend = 0;
+  if (millis() - lastSend > 500) {
+    sendDistance();
+    lastSend = millis();
+  }
+  
+  delay(100);
+}
+
+int readUltrasonic() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.034 / 2;
+  
+  return distance;
+}
+
+void processCommand(char command) {
+  switch(command) {
+    case 'F': // Motor adelante (derecha)
+      motorDerecha();
+      sensorControl = false;
+      break;
+    case 'B': // Motor atrás (izquierda)
+      motorIzquierda();
+      sensorControl = false;
+      break;
+    case 'S': // Detener motor
+      stopMotor();
+      sensorControl = false;
+      break;
+    case 'A': // Activar control automático por sensor
+      sensorControl = true;
+      break;
+    case 'M': // Desactivar control automático
+      sensorControl = false;
+      stopMotor();
+      break;
+  }
+}
+
+void controlMotorBySensor() {
+  if (distance >= 100 && distance <= 200) {
+    motorDerecha();
+  } else if (distance > 200 && distance <= 300) {
+    motorIzquierda();
+  } else {
+    stopMotor();
+  }
+}
+
+void motorDerecha() {
+  digitalWrite(motorIN1, HIGH);
+  digitalWrite(motorIN2, LOW);
+  analogWrite(motorENA, 200); // Velocidad media
+}
+
+void motorIzquierda() {
+  digitalWrite(motorIN1, LOW);
+  digitalWrite(motorIN2, HIGH);
+  analogWrite(motorENA, 200); // Velocidad media
+}
+
+void stopMotor() {
+  digitalWrite(motorIN1, LOW);
+  digitalWrite(motorIN2, LOW);
+  analogWrite(motorENA, 0);
+}
+
+void sendDistance() {
+  bluetooth.print("DIST:");
+  bluetooth.println(distance);
+}
